@@ -1,0 +1,18 @@
+{
+    "cSpell.words": [
+        "bindcreed",
+        "createdb",
+        "createsuperuser",
+        "gunicorn",
+        "PGDATABASE",
+        "PGHOST",
+        "PGPASSWORD",
+        "PGPORT",
+        "PGUSER",
+        "runserver",
+        "unticked",
+        "urlsafe",
+        "uwsgi",
+        "venv"
+    ]
+}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Sending Sessions{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>Sending sessions</h1>
+    <a class="btn" href="{% url 'session_create' %}">New session</a>
+  </div>
+  {% if sessions %}
+  <table>
+    <tr><th>Name</th><th>SMTP server</th><th>Status</th><th>Created</th><th></th></tr>
+    {% for s in sessions %}
+    <tr>
+      <td><a href="{% url 'session_detail' s.pk %}">{{ s.name }}</a></td>
+      <td>{{ s.smtp_config.name }}</td>
+      <td><span class="badge {% if s.status == 'sent' %}sent{% elif s.status == 'sending' %}pending{% else %}pending{% endif %}">{{ s.get_status_display }}</span></td>
+      <td>{{ s.created_at|date:"d M Y H:i" }}</td>
+      <td><a class="btn secondary small" href="{% url 'session_detail' s.pk %}">Open</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No sending sessions yet. Create one to get started.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Mailer{% endblock %}</title>
+<style>
+  :root{
+    --navy:#122A54; --navy-deep:#0C1E3D; --gold:#B8860B; --ink:#232A38;
+    --sub:#5B6478; --line:#DCE1EA; --tint:#F5F6FA; --good:#1E7A46; --bad:#A3372C;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--ink);background:var(--tint);margin:0;}
+  a{color:var(--navy);}
+  header.top{background:var(--navy-deep);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(12,30,61,.25);position:relative;z-index:2;}
+  header.top a{color:#dbe2f0;text-decoration:none;margin-right:18px;font-size:14px;transition:color .15s;}
+  header.top a:hover{color:#fff;}
+  header.top .brand{font-weight:700;font-size:16px;margin-right:30px;color:#fff;letter-spacing:.2px;}
+  main{max-width:960px;margin:24px auto;padding:0 20px 60px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:20px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(18,42,84,.05);}
+  .card-form{max-width:640px;margin-left:auto;margin-right:auto;padding:28px 32px;}
+  h1{font-size:20px;color:var(--navy-deep);margin-top:0;}
+  h2{font-size:16px;color:var(--navy-deep);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;background:var(--navy);color:#fff;padding:8px 10px;font-weight:600;font-size:12.5px;}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);}
+  tr:nth-child(even) td{background:#FAFBFD;}
+  .btn{display:inline-block;background:var(--navy);color:#fff;border:none;padding:9px 16px;border-radius:5px;font-size:13.5px;cursor:pointer;text-decoration:none;transition:background .15s,box-shadow .15s;}
+  .btn:hover{background:var(--navy-deep);box-shadow:0 2px 6px rgba(18,42,84,.25);}
+  .btn.secondary{background:#fff;color:var(--navy);border:1px solid var(--navy);}
+  .btn.secondary:hover{background:var(--tint);box-shadow:none;}
+  .btn.danger{background:var(--bad);}
+  .btn.danger:hover{background:#832B21;}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  input[type=text],input[type=email],input[type=password],input[type=number],textarea,select{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:5px;font-size:13.5px;font-family:inherit;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  input[type=text]:focus,input[type=email]:focus,input[type=password]:focus,input[type=number]:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(18,42,84,.1);
+  }
+  label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--navy);margin:16px 0 5px;}
+  .field-help{font-size:12px;color:var(--sub);margin-top:3px;}
+  .errorlist{color:var(--bad);font-size:12.5px;list-style:none;padding:0;margin:4px 0 0;}
+  .messages{list-style:none;padding:0;margin:0 0 16px;}
+  .messages li{padding:10px 14px;border-radius:4px;margin-bottom:8px;font-size:13.5px;}
+  .messages .success{background:#EAF6EE;color:var(--good);border:1px solid #BFE3CB;}
+  .messages .error{background:#FBEAEA;color:var(--bad);border:1px solid #F0C6C6;}
+  .messages .info,.messages .warning{background:var(--tint);color:var(--sub);border:1px solid var(--line);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;text-transform:uppercase;}
+  .badge.sent{background:#EAF6EE;color:var(--good);}
+  .badge.pending{background:var(--tint);color:var(--sub);}
+  .badge.failed{background:#FBEAEA;color:var(--bad);}
+  .badge.skipped{background:var(--tint);color:var(--sub);}
+  .progress{background:var(--line);border-radius:6px;overflow:hidden;height:14px;margin:10px 0;}
+  .progress-bar{background:var(--good);height:100%;width:0%;transition:width .3s;}
+  .muted{color:var(--sub);font-size:13px;}
+  .body-preview{background:var(--tint);border:1px solid var(--line);border-radius:6px;padding:14px 16px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere;}
+  .body-preview img{max-width:100%;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .row > *{flex:1;}
+
+  /* ---- form grid: pair fields two-to-a-row ---- */
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;align-items:start;}
+  .form-grid .full{grid-column:1 / -1;}
+  .form-grid .checkbox-field{margin-top:16px;}
+  .form-grid .checkbox-field label{display:flex;align-items:center;gap:8px;text-transform:none;font-size:13.5px;font-weight:600;letter-spacing:0;color:var(--ink);margin:0;cursor:pointer;}
+  .form-grid .checkbox-field input[type=checkbox]{width:auto;margin:0;}
+  .form-actions{margin-top:24px;display:flex;gap:10px;}
+  @media (max-width:560px){ .form-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+{% if user.is_authenticated %}
+<header class="top">
+  <div style="display:flex;align-items:center;">
+    <span class="brand">Mailer</span>
+    <a href="{% url 'session_list' %}">Sessions</a>
+    <a href="{% url 'smtp_list' %}">SMTP Servers</a>
+  </div>
+  <form method="post" action="{% url 'logout' %}" style="margin:0;">
+    {% csrf_token %}
+    <span class="muted" style="color:#c9d2e6;margin-right:10px;">{{ user.username }}</span>
+    <button class="btn secondary small" type="submit">Log out</button>
+  </form>
+</header>
+{% endif %}
+<main>
+  {% if messages %}
+  <ul class="messages">
+    {% for message in messages %}<li class="{{ message.tags }}">{{ message }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

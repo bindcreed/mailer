@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ session.name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <div>
+      <h1>{{ session.name }}</h1>
+      <p class="muted">
+        Sending as <strong>{{ session.smtp_config.from_name }} &lt;{{ session.smtp_config.from_email }}&gt;</strong>
+        via {{ session.smtp_config.name }}
+      </p>
+    </div>
+    <span class="badge pending" id="status-badge">{{ session.get_status_display }}</span>
+  </div>
+
+  <p><strong>Subject:</strong> {{ session.subject }}</p>
+  <div class="body-preview">{{ session.body|safe }}</div>
+  {% if session.attachment %}<p class="muted">Attachment: {{ session.attachment.name }}</p>{% endif %}
+
+  <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+  <p class="muted" id="counts-text">
+    {{ counts.sent }} sent · {{ counts.failed }} failed · {{ counts.pending }} pending · {{ counts.total }} total
+  </p>
+
+  <div style="margin-top:14px;">
+    {% if is_running %}
+      <form method="post" action="{% url 'session_stop' session.pk %}" style="display:inline;">
+        {% csrf_token %}<button class="btn danger" type="submit">Stop after current email</button>
+      </form>
+    {% elif can_resume %}
+      <form method="post" action="{% url 'session_start' session.pk %}" style="display:inline;">
+        {% csrf_token %}<button class="btn" type="submit">Resume sending</button>
+      </form>
+    {% else %}
+      <form method="post" action="{% url 'session_start' session.pk %}" style="display:inline;">
+        {% csrf_token %}<button class="btn" type="submit">Start sending</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Upload recipient list</h2>
+  <p class="muted">Upload an .xlsx or .csv with a name column and an email column. If some of these addresses were already emailed in this session, you'll get a chance to review them before anything is (re)sent.</p>
+  <form method="post" action="{% url 'session_upload' session.pk %}" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ upload_form.file }}
+    <button class="btn" type="submit" style="margin-top:12px;">Upload &amp; preview</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Recipients ({{ counts.total }})</h2>
+  {% if recipients %}
+  {{ recipients_data|json_script:"recipients-data" }}
+  <div id="recipients-grid" class="ag-theme-quartz" style="height:460px;width:100%;"></div>
+  {% else %}
+  <p class="muted">No recipients uploaded yet.</p>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  var statusUrl = "{% url 'session_status_json' session.pk %}";
+  var badge = document.getElementById('status-badge');
+  var bar = document.getElementById('progress-bar');
+  var countsText = document.getElementById('counts-text');
+
+  function poll() {
+    fetch(statusUrl).then(function(r) { return r.json(); }).then(function(data) {
+      var c = data.counts;
+      var pct = c.total ? Math.round(((c.sent + c.failed) / c.total) * 100) : 0;
+      bar.style.width = pct + '%';
+      countsText.textContent = c.sent + ' sent · ' + c.failed + ' failed · ' + c.pending + ' pending · ' + c.total + ' total';
+      badge.textContent = data.status;
+
+      if (data.is_running) {
+        setTimeout(poll, 3000);
+      } else if (data.status === 'completed' || data.status === 'paused') {
+        // final state reached — reload once to show the finished recipient table and buttons
+        if (window.__mm_was_running) {
+          window.location.reload();
+        }
+      }
+      window.__mm_was_running = data.is_running;
+    }).catch(function() { setTimeout(poll, 5000); });
+  }
+  poll();
+})();
+</script>
+
+{% if recipients %}
+<link rel="stylesheet" href="{% static 'vendor/ag-grid/ag-grid.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/ag-grid/ag-theme-quartz.css' %}">
+<script src="{% static 'vendor/ag-grid/ag-grid-community.min.js' %}"></script>
+<script>
+(function() {
+  var rowData = JSON.parse(document.getElementById('recipients-data').textContent);
+
+  function statusCellRenderer(params) {
+    var span = document.createElement('span');
+    span.className = 'badge ' + params.data.status_raw;
+    span.textContent = params.value;
+    return span;
+  }
+
+  var gridOptions = {
+    rowData: rowData,
+    columnDefs: [
+      {field: 'name', headerName: 'Name', flex: 1, minWidth: 140, filter: true, sortable: true},
+      {field: 'email', headerName: 'Email', flex: 1.4, minWidth: 200, filter: true, sortable: true},
+      {field: 'status', headerName: 'Status', width: 130, sortable: true, filter: true, cellRenderer: statusCellRenderer},
+      {field: 'last_sent_at', headerName: 'Last sent', width: 160, sortable: true},
+      {field: 'error_message', headerName: 'Notes', flex: 1.4, minWidth: 180},
+    ],
+    defaultColDef: {resizable: true},
+    animateRows: true,
+    pagination: true,
+    paginationPageSize: 50,
+    paginationPageSizeSelector: [25, 50, 100, 200],
+    domLayout: 'normal',
+  };
+
+  agGrid.createGrid(document.getElementById('recipients-grid'), gridOptions);
+})();
+</script>
+{% endif %}
+{% endblock %}

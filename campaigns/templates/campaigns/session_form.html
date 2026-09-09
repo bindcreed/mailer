@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}New Sending Session{% endblock %}
+{% block content %}
+<div class="card card-form" style="max-width:760px;">
+  <h1>New sending session</h1>
+  {% if not form.fields.smtp_config.queryset.exists %}
+    <p class="muted">You don't have an SMTP server configured yet. <a href="{% url 'smtp_create' %}">Add one first</a>.</p>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" id="session-form">
+    {% csrf_token %}
+    <div class="form-grid">
+      <div>
+        <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+        {{ form.name }}
+        {{ form.name.errors }}
+      </div>
+      <div>
+        <label for="{{ form.smtp_config.id_for_label }}">{{ form.smtp_config.label }}</label>
+        {{ form.smtp_config }}
+        {{ form.smtp_config.errors }}
+      </div>
+
+      <div class="full">
+        <label for="{{ form.subject.id_for_label }}">{{ form.subject.label }}</label>
+        {{ form.subject }}
+        {{ form.subject.errors }}
+      </div>
+
+      <div class="full">
+        <label>Body</label>
+        <div class="body-editor-toolbar">
+          <button type="button" class="btn secondary small" id="btn-mode-rich">Rich text</button>
+          <button type="button" class="btn secondary small" id="btn-mode-html">Raw HTML</button>
+          <button type="button" class="btn secondary small" id="btn-insert-name">Insert {% verbatim %}{{name}}{% endverbatim %}</button>
+          <span class="field-help" style="margin-left:auto;">Use {% verbatim %}{{name}}{% endverbatim %} anywhere for the recipient's name.</span>
+        </div>
+        <div id="quill-editor"></div>
+        <textarea id="id_body_raw" class="raw-html-editor" rows="14" style="display:none;" spellcheck="false" placeholder="Paste or write raw HTML here..."></textarea>
+        {{ form.body }}
+        {{ form.body.errors }}
+      </div>
+
+      <div class="full">
+        <label for="{{ form.attachment.id_for_label }}">{{ form.attachment.label }}</label>
+        {{ form.attachment }}
+        {{ form.attachment.errors }}
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" type="submit">Create session</button>
+      <a class="btn secondary" href="{% url 'session_list' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<link rel="stylesheet" href="{% static 'vendor/quill/quill.snow.css' %}">
+<script src="{% static 'vendor/quill/quill.js' %}"></script>
+<style>
+  .body-editor-toolbar{display:flex;align-items:center;gap:8px;margin:16px 0 5px;flex-wrap:wrap;}
+  #quill-editor{background:#fff;border-radius:0 0 5px 5px;}
+  #quill-editor .ql-editor{min-height:220px;font-size:13.5px;font-family:inherit;}
+  .ql-toolbar.ql-snow{border-radius:5px 5px 0 0;border-color:var(--line);background:#fff;}
+  .ql-container.ql-snow{border-color:var(--line);border-radius:0 0 5px 5px;}
+  .raw-html-editor{min-height:260px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;white-space:pre;}
+  .body-editor-toolbar .btn.secondary.active{background:var(--navy);color:#fff;}
+</style>
+<script>
+(function(){
+  var quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{header:[false,1,2,3]}],
+        ['bold','italic','underline','strike'],
+        [{color:[]},{background:[]}],
+        [{list:'ordered'},{list:'bullet'}],
+        ['link','image'],
+        ['clean']
+      ]
+    }
+  });
+
+  var realField = document.getElementById('id_body_real');
+  var rawField = document.getElementById('id_body_raw');
+  var btnRich = document.getElementById('btn-mode-rich');
+  var btnHtml = document.getElementById('btn-mode-html');
+  var btnInsertName = document.getElementById('btn-insert-name');
+  var editorEl = document.getElementById('quill-editor');
+  var toolbarEl = document.querySelector('.ql-toolbar');
+  var mode = 'rich';
+  var NAME_TOKEN = '{% verbatim %}{{name}}{% endverbatim %}';
+
+  // Seed the editor from any existing content (e.g. a validation re-render).
+  var initialHtml = realField.value || '';
+  if(initialHtml.trim()){
+    quill.clipboard.dangerouslyPasteHTML(initialHtml);
+  }
+
+  function syncReal(){
+    realField.value = (mode === 'rich') ? quill.root.innerHTML : rawField.value;
+  }
+
+  // Keep the hidden field live-synced, not just at submit time — this is
+  // what lets the browser's own (non-required) validation see real
+  // content immediately, and keeps things consistent if anything else
+  // on the page inspects the field before submit.
+  quill.on('text-change', syncReal);
+  rawField.addEventListener('input', syncReal);
+
+  function setMode(next){
+    if(next === mode) return;
+    if(next === 'html'){
+      rawField.value = quill.root.innerHTML;
+      editorEl.style.display = 'none';
+      if(toolbarEl) toolbarEl.style.display = 'none';
+      rawField.style.display = 'block';
+      btnHtml.classList.add('active');
+      btnRich.classList.remove('active');
+    } else {
+      quill.clipboard.dangerouslyPasteHTML(rawField.value || '');
+      rawField.style.display = 'none';
+      editorEl.style.display = 'block';
+      if(toolbarEl) toolbarEl.style.display = 'block';
+      btnRich.classList.add('active');
+      btnHtml.classList.remove('active');
+    }
+    mode = next;
+  }
+
+  btnRich.addEventListener('click', function(){ setMode('rich'); });
+  btnHtml.addEventListener('click', function(){ setMode('html'); });
+  btnRich.classList.add('active');
+
+  btnInsertName.addEventListener('click', function(){
+    if(mode === 'rich'){
+      var range = quill.getSelection(true);
+      quill.insertText(range ? range.index : quill.getLength(), NAME_TOKEN);
+    } else {
+      var el = rawField;
+      var start = el.selectionStart, end = el.selectionEnd;
+      el.value = el.value.slice(0, start) + NAME_TOKEN + el.value.slice(end);
+      el.focus();
+    }
+  });
+
+  document.getElementById('session-form').addEventListener('submit', syncReal);
+})();
+</script>
+{% endblock %}

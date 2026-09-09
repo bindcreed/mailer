@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}SMTP Servers{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h1>SMTP servers</h1>
+    <a class="btn" href="{% url 'smtp_create' %}">Add server</a>
+  </div>
+  {% if configs %}
+  <table>
+    <tr><th>Name</th><th>Host</th><th>From address</th><th>Security</th><th></th></tr>
+    {% for c in configs %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ c.host }}:{{ c.port }}</td>
+      <td>{{ c.from_name }} &lt;{{ c.from_email }}&gt;</td>
+      <td>{% if c.use_ssl %}SSL{% elif c.use_tls %}STARTTLS{% else %}None{% endif %}</td>
+      <td style="white-space:nowrap;">
+        <form method="post" action="{% url 'smtp_test' c.pk %}" style="display:inline;">
+          {% csrf_token %}<button class="btn secondary small" type="submit">Test</button>
+        </form>
+        <a class="btn secondary small" href="{% url 'smtp_edit' c.pk %}">Edit</a>
+        <form method="post" action="{% url 'smtp_delete' c.pk %}" style="display:inline;" onsubmit="return confirm('Delete this SMTP server?');">
+          {% csrf_token %}<button class="btn danger small" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">No SMTP servers configured yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Review upload{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Review before adding to "{{ session.name }}"</h1>
+  <p class="muted">
+    {{ new_count }} new · {{ retry_count }} will (re)send automatically ·
+    {{ already_sent_count }} already sent in this session — tick any you want to resend.
+    {% if invalid_rows %}{{ invalid_rows|length }} row(s) skipped (see below).{% endif %}
+  </p>
+
+  <form method="post" action="{% url 'session_upload_confirm' session.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="row_count" value="{{ rows|length }}">
+    <table>
+      <tr><th>Name</th><th>Email</th><th>Status</th><th>Resend?</th></tr>
+      {% for row in rows %}
+      <tr>
+        <td>
+          {{ row.name }}
+          <input type="hidden" name="rows-{{ forloop.counter0 }}-name" value="{{ row.name }}">
+        </td>
+        <td>
+          {{ row.email }}
+          <input type="hidden" name="rows-{{ forloop.counter0 }}-email" value="{{ row.email }}">
+        </td>
+        <td>
+          {% if row.kind == 'new' %}<span class="badge pending">New</span>
+          {% elif row.kind == 'retry' %}<span class="badge pending">Will send</span>
+          {% else %}<span class="badge sent">Already sent{% if row.last_sent_at %} {{ row.last_sent_at|date:"d M Y" }}{% endif %}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.kind == 'already_sent' %}
+            <input type="checkbox" name="rows-{{ forloop.counter0 }}-resend">
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <div style="margin-top:20px;">
+      <button class="btn" type="submit">Confirm &amp; add to session</button>
+      <a class="btn secondary" href="{% url 'session_detail' session.pk %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% if invalid_rows %}
+<div class="card">
+  <h2>Skipped rows</h2>
+  <table>
+    <tr><th>Row</th><th>Name</th><th>Email</th><th>Reason</th></tr>
+    {% for row in invalid_rows %}
+    <tr><td>{{ row.row_number }}</td><td>{{ row.name }}</td><td>{{ row.email }}</td><td class="muted">{{ row.reason }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

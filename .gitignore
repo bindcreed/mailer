@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+/staticfiles/
+/media/
+db.sqlite3
+*.log
+.venv/
+venv/
+test_maildir/

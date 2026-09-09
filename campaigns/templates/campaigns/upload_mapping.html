@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Match columns{% endblock %}
+{% block content %}
+<div class="card card-form">
+  <h1>Which column is which?</h1>
+  <p class="muted">We couldn't confidently tell which column in <strong>{{ filename }}</strong> holds the name and which holds the email address. Pick them below.</p>
+  <form method="post" action="{% url 'session_upload_mapped' session.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="filename" value="{{ filename }}">
+    <input type="hidden" name="file_b64" value="{{ file_b64 }}">
+
+    <div class="form-grid">
+      <div>
+        <label for="name_column">Name column</label>
+        <select name="name_column" id="name_column" required>
+          {% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="email_column">Email column</label>
+        <select name="email_column" id="email_column" required>
+          {% for h in headers %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" type="submit">Continue</button>
+      <a class="btn secondary" href="{% url 'session_detail' session.pk %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{% if is_new %}Add{% else %}Edit{% endif %} SMTP Server{% endblock %}
+{% block content %}
+<div class="card card-form">
+  <h1>{% if is_new %}Add SMTP server{% else %}Edit {{ smtp.name }}{% endif %}</h1>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="full">
+        <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+        {{ form.name }}
+        {% if form.name.help_text %}<div class="field-help">{{ form.name.help_text }}</div>{% endif %}
+        {{ form.name.errors }}
+      </div>
+
+      <div>
+        <label for="{{ form.host.id_for_label }}">{{ form.host.label }}</label>
+        {{ form.host }}
+        {{ form.host.errors }}
+      </div>
+      <div>
+        <label for="{{ form.port.id_for_label }}">{{ form.port.label }}</label>
+        {{ form.port }}
+        {{ form.port.errors }}
+      </div>
+
+      <div class="checkbox-field">
+        <label for="{{ form.use_tls.id_for_label }}">{{ form.use_tls }} {{ form.use_tls.label }}</label>
+        {% if form.use_tls.help_text %}<div class="field-help">{{ form.use_tls.help_text }}</div>{% endif %}
+      </div>
+      <div class="checkbox-field">
+        <label for="{{ form.use_ssl.id_for_label }}">{{ form.use_ssl }} {{ form.use_ssl.label }}</label>
+        {% if form.use_ssl.help_text %}<div class="field-help">{{ form.use_ssl.help_text }}</div>{% endif %}
+      </div>
+
+      <div class="full">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.help_text %}<div class="field-help">{{ form.username.help_text }}</div>{% endif %}
+        {{ form.username.errors }}
+      </div>
+
+      <div>
+        <label for="{{ form.from_name.id_for_label }}">{{ form.from_name.label }}</label>
+        {{ form.from_name }}
+        {{ form.from_name.errors }}
+      </div>
+      <div>
+        <label for="{{ form.from_email.id_for_label }}">{{ form.from_email.label }}</label>
+        {{ form.from_email }}
+        {{ form.from_email.errors }}
+      </div>
+
+      <div class="full">
+        <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+        {{ form.password }}
+        {% if form.password.help_text %}<div class="field-help">{{ form.password.help_text }}</div>{% endif %}
+        {{ form.password.errors }}
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" type="submit">Save</button>
+      <a class="btn secondary" href="{% url 'smtp_list' %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
