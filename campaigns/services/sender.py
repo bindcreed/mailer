@@ -6,6 +6,7 @@ wrapped in angle brackets (some receiving/spam-filtering servers treat
 a bare, unwrapped address as a sign of a hand-rolled spam script).
 """
 import logging
+import smtplib
 import threading
 import time
 from email.utils import formataddr
@@ -14,6 +15,43 @@ from django.core.mail import EmailMultiAlternatives, get_connection
 from django.conf import settings
 from django.utils import timezone
 from django.utils.html import strip_tags
+
+# The one error that means the SMTP *connection* died underneath us — as
+# opposed to a bad recipient address or a rejected message — and is worth
+# reconnecting and retrying immediately for. Many SMTP hosts (shared/
+# low-cost ones especially, which is exactly what a self-hosted mail merge
+# tool tends to be pointed at) silently close idle connections, or cap how
+# many messages a single connection may send before it's dropped. Without
+# this, one dropped connection partway through a run would otherwise fail
+# every remaining recipient with "please run connect() first", even though
+# nothing is actually wrong with those addresses.
+#
+# Deliberately just this one exception, not a broader OSError catch: every
+# exception smtplib raises (SMTPRecipientsRefused, SMTPResponseException,
+# SMTPDataError, etc.) is ALSO a subclass of OSError, so a wider tuple here
+# would silently swallow real rejections too — including the 4xx "temporary,
+# try again" ones _is_temporary_smtp_error()/the backoff-retry loop below
+# are specifically meant to catch, retrying them instantly with no backoff
+# instead of waiting first.
+_CONNECTION_DROPPED_ERRORS = (smtplib.SMTPServerDisconnected,)
+
+# A 4xx SMTP response is a *temporary* rejection — "try again shortly" —
+# most commonly a host rate-limiting how fast one account can send (e.g.
+# "452 Sender is throttled" on shared/budget hosting). A 5xx response is
+# permanent (bad mailbox, blocked sender) and retrying it is pointless.
+# When we hit a 4xx, back off for a while and retry the same recipient a
+# couple of times before giving up, instead of marking it failed outright.
+_MAX_TEMPORARY_RETRIES = 2
+_TEMPORARY_RETRY_BACKOFF_SECONDS = 20
+
+
+def _is_temporary_smtp_error(exc) -> bool:
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        codes = [code for code, _ in exc.recipients.values()]
+        return bool(codes) and all(400 <= code < 500 for code in codes)
+    if isinstance(exc, smtplib.SMTPResponseException):
+        return 400 <= exc.smtp_code < 500
+    return False
 
 logger = logging.getLogger("campaigns.sender")
 
@@ -48,6 +86,18 @@ def _html_to_plain_text(html: str) -> str:
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text
+
+
+def _reconnect(connection):
+    """Force-close and reopen an SMTP connection. Used when the server has
+    dropped it out from under us (idle timeout, per-connection message cap,
+    etc.) so the run can keep going instead of failing every remaining
+    recipient."""
+    try:
+        connection.close()
+    except Exception:  # noqa: BLE001 — the old connection is already dead; ignore close errors
+        pass
+    connection.open()
 
 
 def is_running(session_id: int) -> bool:
@@ -130,15 +180,63 @@ def _run(session_id: int):
                     session.attachment.close()
 
             recipient.attempts += 1
-            try:
-                message.send(fail_silently=False)
+            send_error = None
+            gave_up_for_stop = False
+            for temp_attempt in range(_MAX_TEMPORARY_RETRIES + 1):
+                try:
+                    try:
+                        sent_count = message.send(fail_silently=False)
+                    except _CONNECTION_DROPPED_ERRORS as conn_exc:
+                        logger.warning(
+                            "SMTP connection dropped while sending to %s (%s) — reconnecting and retrying once",
+                            recipient.email, conn_exc,
+                        )
+                        _reconnect(connection)
+                        sent_count = message.send(fail_silently=False)
+                    if sent_count != 1:
+                        # message.send() returns how many messages actually
+                        # went out. With fail_silently=False this can only
+                        # come back 0 if Django decided there was nothing to
+                        # send (e.g. no recipients on the message) rather
+                        # than raising — treat that as a failure explicitly
+                        # instead of silently taking "no exception" as proof
+                        # of success.
+                        raise RuntimeError(
+                            f"send() reported {sent_count} message(s) sent, expected 1 — not counting this as delivered"
+                        )
+                    send_error = None
+                    break
+                except Exception as exc:  # noqa: BLE001 — one bad recipient must not kill the run
+                    send_error = exc
+                    if _is_temporary_smtp_error(exc) and temp_attempt < _MAX_TEMPORARY_RETRIES:
+                        session.refresh_from_db(fields=["stop_requested"])
+                        if session.stop_requested:
+                            # Don't burn a retry (or mark this recipient failed)
+                            # just because the user hit Stop mid-backoff —
+                            # leave it pending and let the outer loop stop.
+                            gave_up_for_stop = True
+                            break
+                        logger.warning(
+                            "Temporary rejection for %s (%s) — waiting %ss before retry %s/%s",
+                            recipient.email, exc, _TEMPORARY_RETRY_BACKOFF_SECONDS,
+                            temp_attempt + 1, _MAX_TEMPORARY_RETRIES,
+                        )
+                        time.sleep(_TEMPORARY_RETRY_BACKOFF_SECONDS)
+                        continue
+                    break
+
+            if gave_up_for_stop:
+                stopped = True
+                break
+
+            if send_error is None:
                 recipient.status = Recipient.STATUS_SENT
                 recipient.last_sent_at = timezone.now()
                 recipient.error_message = ""
-            except Exception as exc:  # noqa: BLE001 — one bad recipient must not kill the run
+            else:
                 recipient.status = Recipient.STATUS_FAILED
-                recipient.error_message = str(exc)
-                logger.warning("Send failed for %s: %s", recipient.email, exc)
+                recipient.error_message = str(send_error)
+                logger.warning("Send failed for %s: %s", recipient.email, send_error)
 
             recipient.save(update_fields=["status", "last_sent_at", "error_message", "attempts"])
 
